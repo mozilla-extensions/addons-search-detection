@@ -1,0 +1,31 @@
+{
+  "manifest_version": 2,
+  "name": "Add-ons Search Experiment",
+  "applications": {
+    "gecko": {
+      "id": "addons-search-experiment@mozilla.com"
+    }
+  },
+  "version": "1.0.0",
+  "description": "",
+  "experiment_apis": {
+    "addonsSearchExperiment": {
+      "schema": "schema.json",
+      "parent": {
+        "scopes": ["addon_parent"],
+        "script": "api.js",
+        "events": ["startup"],
+        "paths": [["addonsSearchExperiment"]]
+      }
+    }
+  },
+  "permissions": [
+    "<all_urls>",
+    "telemetry",
+    "webRequest",
+    "webRequestBlocking"
+  ],
+  "background": {
+    "scripts": ["background.js"]
+  }
+}

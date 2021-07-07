@@ -1,0 +1,52 @@
+[
+  {
+    "namespace": "addonsSearchExperiment",
+    "functions": [
+      {
+        "name": "getMatchPatterns",
+        "type": "function",
+        "async": true,
+        "parameters": []
+      },
+      {
+        "name": "getRequestProperty",
+        "type": "function",
+        "async": true,
+        "parameters": [
+          { "name": "requestId", "type": "string" },
+          { "name": "propertyName", "type": "string" }
+        ]
+      },
+      {
+        "name": "getRequestUrl",
+        "type": "function",
+        "async": true,
+        "parameters": [{ "name": "requestId", "type": "string" }]
+      },
+      {
+        "name": "getAddonById",
+        "type": "function",
+        "async": true,
+        "parameters": [{ "name": "addonId", "type": "string" }]
+      },
+      {
+        "name": "getPublicSuffix",
+        "type": "function",
+        "async": true,
+        "parameters": [{ "name": "url", "type": "string" }]
+      }
+    ],
+    "events": [
+      {
+        "name": "onSearchEngineModified",
+        "type": "function",
+        "parameters": [
+          {
+            "name": "type",
+            "type": "string"
+          }
+        ]
+      }
+    ]
+  }
+]
