@@ -50,6 +50,10 @@ class AddonsSearchExperiment {
       );
     }
 
+    if (browser.webRequest.onBeforeRedirect.hasListener(this.noOpHandler)) {
+      browser.webRequest.onBeforeRedirect.removeListener(this.noOpHandler);
+    }
+
     // Retrieve the list of URL patterns to monitor with our listener.
     //
     // Note: search suggestions are system principal requests, so webRequest
@@ -64,11 +68,22 @@ class AddonsSearchExperiment {
       return;
     }
 
+    // This is needed to force the registration of a traceable channel.
+    browser.webRequest.onBeforeRequest.addListener(
+      this.noOpHandler,
+      { urls: patterns },
+      ["blocking"]
+    );
+
     console.debug("registering onBeforeRedirect listener");
     browser.webRequest.onBeforeRedirect.addListener(this.webRequestHandler, {
       urls: patterns,
     });
   }
+
+  noOpHandler = () => {
+    // Do nothing.
+  };
 
   webRequestHandler = async ({ requestId, url, redirectUrl }) => {
     // When we detect a redirect, we read the request property, hoping to find
