@@ -18,13 +18,7 @@
         ]
       },
       {
-        "name": "getRequestUrl",
-        "type": "function",
-        "async": true,
-        "parameters": [{ "name": "requestId", "type": "string" }]
-      },
-      {
-        "name": "getAddonById",
+        "name": "getAddonVersion",
         "type": "function",
         "async": true,
         "parameters": [{ "name": "addonId", "type": "string" }]

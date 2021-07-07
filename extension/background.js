@@ -13,7 +13,6 @@ const TELEMETRY_VALUE_SERVER = "server";
 class AddonsSearchExperiment {
   constructor() {
     this.matchPatternsMap = {};
-    this.lastRequestIdReported = null;
 
     console.debug("registering telemetry events");
     browser.telemetry.registerEvents(TELEMETRY_CATEGORY, {
@@ -43,13 +42,6 @@ class AddonsSearchExperiment {
     // after. This is because we're using the same listener with different URL
     // patterns (when the list of search engines changes).
     if (
-      browser.webRequest.onBeforeRequest.hasListener(this.webRequestHandler)
-    ) {
-      console.debug("removing onBeforeRequest listener");
-      browser.webRequest.onBeforeRequest.removeListener(this.webRequestHandler);
-    }
-
-    if (
       browser.webRequest.onBeforeRedirect.hasListener(this.webRequestHandler)
     ) {
       console.debug("removing onBeforeRedirect listener");
@@ -72,31 +64,13 @@ class AddonsSearchExperiment {
       return;
     }
 
-    console.debug("registering onBeforeRequest listener");
-    browser.webRequest.onBeforeRequest.addListener(
-      this.webRequestHandler,
-      { urls: patterns },
-      ["blocking"]
-    );
-
-    // This one is needed in addition to `onBeforeRequest` because this
-    // extension might be registered before or after some extensions.
-    // Depending on that, our `onBeforeRequest` listener might not be called,
-    // which is why we also listen to `onBeforeRedirect`.
     console.debug("registering onBeforeRedirect listener");
     browser.webRequest.onBeforeRedirect.addListener(this.webRequestHandler, {
       urls: patterns,
     });
   }
 
-  // `redirectUrl` is usually valid when the redirect has been detected via
-  // `onBeforeRedirect`, otherwise it's likely `undefined`.
   webRequestHandler = async ({ requestId, url, redirectUrl }) => {
-    if (this.lastRequestIdReported === requestId) {
-      console.debug(`request ID '${requestId}' already reported, skipping...`);
-      return;
-    }
-
     // When we detect a redirect, we read the request property, hoping to find
     // an add-on ID corresponding to the add-on that initiated the redirect.
     // It might not return anything when the redirect is a search server-side
@@ -107,21 +81,17 @@ class AddonsSearchExperiment {
     );
 
     // When we did not find an add-on ID in the request property bag and the
-    // `redirectUrl` is both valid and different than the original URL. we
-    // likely detected a search server-side redirect.
-    const isServerSideRedirect =
-      !addonId && typeof redirectUrl !== "undefined" && url !== redirectUrl;
+    // `redirectUrl` is different than the original URL. we likely detected a
+    // search server-side redirect.
+    const isServerSideRedirect = !addonId && url !== redirectUrl;
+
+    console.log({ requestId, isServerSideRedirect, addonId, url, redirectUrl });
 
     // Search server-side redirects are possible because an extension has
     // registered a search engine, which is why we can (hopefully) retrieve the
     // add-on ID.
     if (isServerSideRedirect) {
-      const id = this.getAddonIdFromUrl(url);
-
-      // We shouldn't report built-in search engines.
-      if (!id.endsWith("@search.mozilla.org")) {
-        addonId = id;
-      }
+      addonId = this.getAddonIdFromUrl(url);
     }
 
     if (!addonId) {
@@ -131,23 +101,15 @@ class AddonsSearchExperiment {
 
     // This is the (initial) URL before the redirect.
     const from = await browser.addonsSearchExperiment.getPublicSuffix(url);
-
     // This is the URL after the redirect.
-    const requestUrl =
-      redirectUrl ||
-      (await browser.addonsSearchExperiment.getRequestUrl(requestId));
-    const to = await browser.addonsSearchExperiment.getPublicSuffix(requestUrl);
+    const to = await browser.addonsSearchExperiment.getPublicSuffix(
+      redirectUrl
+    );
 
     if (from === to) {
       // We do not report redirects to same public suffixes.
       return;
     }
-
-    // Hopefully this is "all" we need to prevent multiple Telemetry event
-    // submissions, which might happen when both `onBeforeRequest` and
-    // `onBeforeRedirect` listeners are called for the same request (which is
-    // possible depending on the order of the registered listeners).
-    this.lastRequestIdReported = requestId;
 
     const telemetryObject = isServerSideRedirect
       ? TELEMETRY_OBJECT_OTHER
@@ -157,21 +119,15 @@ class AddonsSearchExperiment {
       ? TELEMETRY_VALUE_SERVER
       : TELEMETRY_VALUE_EXTENSION;
 
-    // Get the add-on details we need to send as extra props.
-    const addon = await browser.addonsSearchExperiment.getAddonById(addonId);
-
-    const telemetryExtra = {
-      addonId,
-      addonVersion: addon.version,
-      from,
-      to,
-    };
+    const addonVersion = await browser.addonsSearchExperiment.getAddonVersion(
+      addonId
+    );
 
     this.recordEvent(
       TELEMETRY_METHOD_ETLD_CHANGE,
       telemetryObject,
       telemetryValue,
-      telemetryExtra
+      { addonId, addonVersion, from, to }
     );
   };
 
@@ -204,27 +160,23 @@ class AddonsSearchExperiment {
   }
 }
 
-const start = async () => {
-  const exp = new AddonsSearchExperiment();
-  await exp.monitor();
+const exp = new AddonsSearchExperiment();
+exp.monitor();
 
-  browser.addonsSearchExperiment.onSearchEngineModified.addListener(
-    async (type) => {
-      switch (type) {
-        case "engine-added":
-        case "engine-removed":
-          // For these modified types, we want to reload the list of search
-          // engines that are monitored, which is why we break to let the rest
-          // of the code execute.
-          break;
+browser.addonsSearchExperiment.onSearchEngineModified.addListener(
+  async (type) => {
+    switch (type) {
+      case "engine-added":
+      case "engine-removed":
+        // For these modified types, we want to reload the list of search
+        // engines that are monitored, which is why we break to let the rest
+        // of the code execute.
+        break;
 
-        default:
-          return;
-      }
-
-      await exp.monitor();
+      default:
+        return;
     }
-  );
-};
 
-start();
+    await exp.monitor();
+  }
+);

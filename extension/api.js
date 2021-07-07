@@ -18,38 +18,19 @@ XPCOMUtils.defineLazyServiceGetter(
   "nsIEffectiveTLDService"
 );
 
+XPCOMUtils.defineLazyGetter(global, "searchInitialized", () => {
+  if (Services.search.isInitialized) {
+    return Promise.resolve();
+  }
+
+  return ExtensionUtils.promiseObserved(
+    "browser-search-service",
+    (_, data) => data === "init-complete"
+  );
+});
+
 this.addonsSearchExperiment = class extends ExtensionAPI {
   onStartup() {}
-
-  makeOnSearchEngineModified(context) {
-    return new ExtensionCommon.EventManager({
-      context,
-      name: "addonsSearchExperiment.onSearchEngineModified",
-      register: (fire) => {
-        const onSearchEngineModifiedObserver = {
-          observe(aSubject, aTopic, aData) {
-            if (aTopic !== SearchUtils.TOPIC_ENGINE_MODIFIED) {
-              return;
-            }
-
-            fire.async(aData);
-          },
-        };
-
-        Services.obs.addObserver(
-          onSearchEngineModifiedObserver,
-          SearchUtils.TOPIC_ENGINE_MODIFIED
-        );
-
-        return () => {
-          Services.obs.removeObserver(
-            onSearchEngineModifiedObserver,
-            SearchUtils.TOPIC_ENGINE_MODIFIED
-          );
-        };
-      },
-    }).api();
-  }
 
   getAPI(context) {
     return {
@@ -65,6 +46,7 @@ this.addonsSearchExperiment = class extends ExtensionAPI {
           const patterns = {};
 
           try {
+            await searchInitialized;
             const visibleEngines = await Services.search.getVisibleEngines();
 
             visibleEngines.forEach((engine) => {
@@ -107,26 +89,11 @@ this.addonsSearchExperiment = class extends ExtensionAPI {
           }
         },
 
-        // `getRequestUrl()` returns the original URL of a request given its
-        // ID. This is needed when a request has been redirected and we want to
-        // retrieve the new URL after the redirect.
-        async getRequestUrl(requestId) {
-          const wrapper = ChannelWrapper.getRegisteredChannel(
-            requestId,
-            context.extension.policy,
-            context.xulBrowser.frameLoader.remoteTab
-          );
-
-          return wrapper?.channel?.name;
-        },
-
-        // `getAddonById()` returns add-on details if it exists. Note that it
-        // does not return a full `add-on` object but a minimal object with
-        // only the necessary information.
-        async getAddonById(addonId) {
+        // `getAddonVersion()` returns the add-on version if it exists.
+        async getAddonVersion(addonId) {
           const addon = await AddonManager.getAddonByID(addonId);
 
-          return { version: addon.version };
+          return addon && addon.version;
         },
 
         // `getPublicSuffix()` returns the public suffix/Effective TLD Service
@@ -147,7 +114,37 @@ this.addonsSearchExperiment = class extends ExtensionAPI {
         // e.g., `engine-added`, `engine-removed`, etc.
         //
         // See: https://searchfox.org/mozilla-central/source/toolkit/components/search/SearchUtils.jsm#145-152
-        onSearchEngineModified: this.makeOnSearchEngineModified(context),
+        onSearchEngineModified: new ExtensionCommon.EventManager({
+          context,
+          name: "addonsSearchExperiment.onSearchEngineModified",
+          register: (fire) => {
+            const onSearchEngineModifiedObserver = (
+              aSubject,
+              aTopic,
+              aData
+            ) => {
+              if (aTopic !== SearchUtils.TOPIC_ENGINE_MODIFIED) {
+                return;
+              }
+
+              fire.async(aData);
+            };
+
+            searchInitialized.then(() => {
+              Services.obs.addObserver(
+                onSearchEngineModifiedObserver,
+                SearchUtils.TOPIC_ENGINE_MODIFIED
+              );
+            });
+
+            return () => {
+              Services.obs.removeObserver(
+                onSearchEngineModifiedObserver,
+                SearchUtils.TOPIC_ENGINE_MODIFIED
+              );
+            };
+          },
+        }).api(),
       },
     };
   }
