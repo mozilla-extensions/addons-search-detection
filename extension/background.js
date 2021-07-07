@@ -85,8 +85,6 @@ class AddonsSearchExperiment {
     // search server-side redirect.
     const isServerSideRedirect = !addonId && url !== redirectUrl;
 
-    console.log({ requestId, isServerSideRedirect, addonId, url, redirectUrl });
-
     // Search server-side redirects are possible because an extension has
     // registered a search engine, which is why we can (hopefully) retrieve the
     // add-on ID.
