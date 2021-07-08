@@ -30,8 +30,6 @@ XPCOMUtils.defineLazyGetter(global, "searchInitialized", () => {
 });
 
 this.addonsSearchExperiment = class extends ExtensionAPI {
-  onStartup() {}
-
   getAPI(context) {
     return {
       addonsSearchExperiment: {
