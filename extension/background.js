@@ -37,6 +37,9 @@ class AddonsSearchExperiment {
     return this.matchPatternsMap;
   }
 
+  // When the search service changes the set of engines that are enabled, we
+  // update our pattern matching in the webrequest listeners (go to the bottom
+  // of this file for the search service events we listen to).
   async monitor() {
     // If there is already a listener, remove it so that we can re-add one
     // after. This is because we're using the same listener with different URL
