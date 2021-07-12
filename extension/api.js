@@ -124,15 +124,15 @@ this.addonsSearchExperiment = class extends ExtensionAPI {
                 return;
               }
 
-              fire.async();
+              searchInitialized.then(() => {
+                fire.async();
+              });
             };
 
-            searchInitialized.then(() => {
-              Services.obs.addObserver(
-                onSearchEngineModifiedObserver,
-                SEARCH_TOPIC_ENGINE_MODIFIED
-              );
-            });
+            Services.obs.addObserver(
+              onSearchEngineModifiedObserver,
+              SEARCH_TOPIC_ENGINE_MODIFIED
+            );
 
             return () => {
               Services.obs.removeObserver(
