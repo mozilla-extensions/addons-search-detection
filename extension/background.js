@@ -179,20 +179,6 @@ class AddonsSearchExperiment {
 const exp = new AddonsSearchExperiment();
 exp.monitor();
 
-browser.addonsSearchExperiment.onSearchEngineModified.addListener(
-  async (type) => {
-    switch (type) {
-      case "engine-added":
-      case "engine-removed":
-        // For these modified types, we want to reload the list of search
-        // engines that are monitored, which is why we break to let the rest
-        // of the code execute.
-        break;
-
-      default:
-        return;
-    }
-
-    await exp.monitor();
-  }
-);
+browser.addonsSearchExperiment.onSearchEngineModified.addListener(async () => {
+  await exp.monitor();
+});

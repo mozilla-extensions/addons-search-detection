@@ -1,10 +1,4 @@
 /* global ExtensionCommon, ExtensionAPI, Services, XPCOMUtils */
-const { SearchUtils } = ChromeUtils.import(
-  "resource://gre/modules/SearchUtils.jsm"
-);
-const { WebRequest } = ChromeUtils.import(
-  "resource://gre/modules/WebRequest.jsm"
-);
 const { AddonManager } = ChromeUtils.import(
   "resource://gre/modules/AddonManager.jsm"
 );
@@ -12,7 +6,7 @@ const { AddonManager } = ChromeUtils.import(
 XPCOMUtils.defineLazyGlobalGetters(this, ["ChannelWrapper"]);
 
 XPCOMUtils.defineLazyServiceGetter(
-  Services,
+  this,
   "eTLD",
   "@mozilla.org/network/effective-tld-service;1",
   "nsIEffectiveTLDService"
@@ -28,6 +22,8 @@ XPCOMUtils.defineLazyGetter(global, "searchInitialized", () => {
     (_, data) => data === "init-complete"
   );
 });
+
+const SEARCH_TOPIC_ENGINE_MODIFIED = "browser-search-engine-modified";
 
 this.addonsSearchExperiment = class extends ExtensionAPI {
   getAPI(context) {
@@ -99,7 +95,7 @@ this.addonsSearchExperiment = class extends ExtensionAPI {
         // See: https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XPCOM/Reference/Interface/nsIEffectiveTLDService
         async getPublicSuffix(url) {
           try {
-            return Services.eTLD.getBaseDomain(Services.io.newURI(url));
+            return eTLD.getBaseDomain(Services.io.newURI(url));
           } catch (err) {
             Cu.reportError(err);
             return null;
@@ -108,8 +104,7 @@ this.addonsSearchExperiment = class extends ExtensionAPI {
 
         // `onSearchEngineModified` is an event that occurs when the list of
         // search engines has changed, e.g., a new engine has been added or an
-        // engine has been removed. Listeners receive the type of modification,
-        // e.g., `engine-added`, `engine-removed`, etc.
+        // engine has been removed.
         //
         // See: https://searchfox.org/mozilla-central/source/toolkit/components/search/SearchUtils.jsm#145-152
         onSearchEngineModified: new ExtensionCommon.EventManager({
@@ -121,24 +116,28 @@ this.addonsSearchExperiment = class extends ExtensionAPI {
               aTopic,
               aData
             ) => {
-              if (aTopic !== SearchUtils.TOPIC_ENGINE_MODIFIED) {
+              if (
+                aTopic !== SEARCH_TOPIC_ENGINE_MODIFIED ||
+                // We are only interested in these modified types.
+                !["engine-added", "engine-removed"].includes(aData)
+              ) {
                 return;
               }
 
-              fire.async(aData);
+              fire.async();
             };
 
             searchInitialized.then(() => {
               Services.obs.addObserver(
                 onSearchEngineModifiedObserver,
-                SearchUtils.TOPIC_ENGINE_MODIFIED
+                SEARCH_TOPIC_ENGINE_MODIFIED
               );
             });
 
             return () => {
               Services.obs.removeObserver(
                 onSearchEngineModifiedObserver,
-                SearchUtils.TOPIC_ENGINE_MODIFIED
+                SEARCH_TOPIC_ENGINE_MODIFIED
               );
             };
           },

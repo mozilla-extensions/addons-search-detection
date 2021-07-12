@@ -34,12 +34,7 @@
       {
         "name": "onSearchEngineModified",
         "type": "function",
-        "parameters": [
-          {
-            "name": "type",
-            "type": "string"
-          }
-        ]
+        "parameters": []
       }
     ]
   }
