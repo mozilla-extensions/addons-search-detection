@@ -126,7 +126,11 @@ this.addonsSearchExperiment = class extends ExtensionAPI {
           },
         }).api(),
 
-        // TODO: documentation
+        // `onBeforeRedirect` is an event very similar to the public web
+        // request `onBeforeRedirect` but it is registered in the privileged
+        // code to make sure that we can read properties on a valid channel
+        // (wrapper). The registered listeners will received the `addonId` in
+        // addition to these props: `requestId`, `url` and `redirectUrl`.
         onBeforeRedirect: new ExtensionCommon.EventManager({
           context,
           name: "addonsSearchExperiment.onBeforeRedirect",
