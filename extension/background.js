@@ -45,16 +45,18 @@ class AddonsSearchExperiment {
     // after. This is because we're using the same listener with different URL
     // patterns (when the list of search engines changes).
     if (
-      browser.webRequest.onBeforeRedirect.hasListener(this.webRequestHandler)
+      browser.addonsSearchExperiment.onBeforeRedirect.hasListener(
+        this.webRequestHandler
+      )
     ) {
       console.debug("removing onBeforeRedirect listener");
-      browser.webRequest.onBeforeRedirect.removeListener(
+      browser.addonsSearchExperiment.onBeforeRedirect.removeListener(
         this.webRequestHandler
       );
     }
 
-    if (browser.webRequest.onBeforeRedirect.hasListener(this.noOpHandler)) {
-      browser.webRequest.onBeforeRedirect.removeListener(this.noOpHandler);
+    if (browser.webRequest.onBeforeRequest.hasListener(this.noOpHandler)) {
+      browser.webRequest.onBeforeRequest.removeListener(this.noOpHandler);
     }
 
     // Retrieve the list of URL patterns to monitor with our listener.
