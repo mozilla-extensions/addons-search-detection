@@ -2,6 +2,9 @@
 const { AddonManager } = ChromeUtils.import(
   "resource://gre/modules/AddonManager.jsm"
 );
+const { WebRequest } = ChromeUtils.import(
+  "resource://gre/modules/WebRequest.jsm"
+);
 
 XPCOMUtils.defineLazyGlobalGetters(this, ["ChannelWrapper"]);
 
@@ -27,6 +30,8 @@ const SEARCH_TOPIC_ENGINE_MODIFIED = "browser-search-engine-modified";
 
 this.addonsSearchExperiment = class extends ExtensionAPI {
   getAPI(context) {
+    const { extension } = context;
+
     return {
       addonsSearchExperiment: {
         // `getMatchPatterns()` returns a map where each key is an URL pattern
@@ -59,28 +64,6 @@ this.addonsSearchExperiment = class extends ExtensionAPI {
           }
 
           return patterns;
-        },
-
-        // `getRequestProperty()` returns the property identified by
-        // `propertyName` for a given `requestId` (= channel ID). This might
-        // not return a value if the channel does not exist anymore or there is
-        // no such property.
-        async getRequestProperty(requestId, propertyName) {
-          const wrapper = ChannelWrapper.getRegisteredChannel(
-            requestId,
-            context.extension.policy,
-            context.xulBrowser.frameLoader.remoteTab
-          );
-
-          try {
-            return wrapper?.channel
-              ?.QueryInterface(Ci.nsIPropertyBag)
-              ?.getProperty(propertyName);
-          } catch {
-            // It is possible the property does not exist (or everything
-            // miserably failed).
-            return null;
-          }
         },
 
         // `getAddonVersion()` returns the add-on version if it exists.
@@ -139,6 +122,60 @@ this.addonsSearchExperiment = class extends ExtensionAPI {
                 onSearchEngineModifiedObserver,
                 SEARCH_TOPIC_ENGINE_MODIFIED
               );
+            };
+          },
+        }).api(),
+
+        // TODO: documentation
+        onBeforeRedirect: new ExtensionCommon.EventManager({
+          context,
+          name: "addonsSearchExperiment.onBeforeRedirect",
+          register: (fire, filter) => {
+            const listener = ({ requestId, url, redirectUrl }) => {
+              const wrapper = ChannelWrapper.getRegisteredChannel(
+                requestId,
+                context.extension.policy,
+                context.xulBrowser.frameLoader.remoteTab
+              );
+
+              // When we detect a redirect, we read the request property,
+              // hoping to find an add-on ID corresponding to the add-on that
+              // initiated the redirect. It might not return anything when the
+              // redirect is a search server-side redirect but it can also be
+              // caused by an error.
+              const addonId = wrapper?.channel
+                ?.QueryInterface(Ci.nsIPropertyBag)
+                ?.getProperty("redirectedByExtension");
+
+              fire.async({ addonId, redirectUrl, requestId, url });
+            };
+
+            // See: toolkit/components/extensions/parent/ext-webRequest.js
+            let filter2 = {};
+            if (filter.urls) {
+              let perms = new MatchPatternSet([
+                ...extension.allowedOrigins.patterns,
+                ...extension.optionalOrigins.patterns,
+              ]);
+
+              filter2.urls = ExtensionUtils.parseMatchPatterns(filter.urls);
+            }
+
+            WebRequest.onBeforeRedirect.addListener(
+              listener,
+              filter2,
+              // info
+              [],
+              // listener details
+              {
+                addonId: extension.id,
+                policy: extension.policy,
+                blockingAllowed: extension.hasPermission("webRequestBlocking"),
+              }
+            );
+
+            return () => {
+              WebRequest.onBeforeRedirect.removeListener(listener);
             };
           },
         }).api(),

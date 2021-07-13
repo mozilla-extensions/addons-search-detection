@@ -9,15 +9,6 @@
         "parameters": []
       },
       {
-        "name": "getRequestProperty",
-        "type": "function",
-        "async": true,
-        "parameters": [
-          { "name": "requestId", "type": "string" },
-          { "name": "propertyName", "type": "string" }
-        ]
-      },
-      {
         "name": "getAddonVersion",
         "type": "function",
         "async": true,
@@ -35,6 +26,35 @@
         "name": "onSearchEngineModified",
         "type": "function",
         "parameters": []
+      },
+      {
+        "name": "onBeforeRedirect",
+        "type": "function",
+        "parameters": [
+          {
+            "name": "details",
+            "type": "object",
+            "properties": {
+              "addonId": { "type": "string" },
+              "redirectUrl": { "type": "string" },
+              "requestId": { "type": "string" },
+              "url": { "type": "string" }
+            }
+          }
+        ],
+        "extraParameters": [
+          {
+            "name": "filter",
+            "type": "object",
+            "properties": {
+              "urls": {
+                "type": "array",
+                "items": { "type": "string" },
+                "minItems": 1
+              }
+            }
+          }
+        ]
       }
     ]
   }

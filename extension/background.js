@@ -79,26 +79,18 @@ class AddonsSearchExperiment {
     );
 
     console.debug("registering onBeforeRedirect listener");
-    browser.webRequest.onBeforeRedirect.addListener(this.webRequestHandler, {
-      urls: patterns,
-    });
+    browser.addonsSearchExperiment.onBeforeRedirect.addListener(
+      this.webRequestHandler,
+      { urls: patterns }
+    );
   }
 
   noOpHandler = () => {
     // Do nothing.
   };
 
-  webRequestHandler = async ({ requestId, url, redirectUrl }) => {
-    // When we detect a redirect, we read the request property, hoping to find
-    // an add-on ID corresponding to the add-on that initiated the redirect.
-    // It might not return anything when the redirect is a search server-side
-    // redirect but it can also be caused by an error.
-    let addonId = await browser.addonsSearchExperiment.getRequestProperty(
-      requestId,
-      "redirectedByExtension"
-    );
-
-    // When we did not find an add-on ID in the request property bag and the
+  webRequestHandler = async ({ addonId, redirectUrl, requestId, url }) => {
+    // When we do not have an add-on ID (in the request property bag) and the
     // `redirectUrl` is different than the original URL. we likely detected a
     // search server-side redirect.
     const isServerSideRedirect = !addonId && url !== redirectUrl;
