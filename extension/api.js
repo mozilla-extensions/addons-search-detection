@@ -107,9 +107,7 @@ this.addonsSearchExperiment = class extends ExtensionAPI {
                 return;
               }
 
-              searchInitialized.then(() => {
-                fire.async();
-              });
+              fire.async();
             };
 
             Services.obs.addObserver(
@@ -154,27 +152,20 @@ this.addonsSearchExperiment = class extends ExtensionAPI {
               fire.async({ addonId, redirectUrl, requestId, url });
             };
 
-            // See: toolkit/components/extensions/parent/ext-webRequest.js
-            let filter2 = {};
-            if (filter.urls) {
-              let perms = new MatchPatternSet([
-                ...extension.allowedOrigins.patterns,
-                ...extension.optionalOrigins.patterns,
-              ]);
-
-              filter2.urls = ExtensionUtils.parseMatchPatterns(filter.urls);
-            }
-
             WebRequest.onBeforeRedirect.addListener(
               listener,
-              filter2,
+              // filter
+              {
+                types: ["main_frame"],
+                urls: ExtensionUtils.parseMatchPatterns(filter.urls),
+              },
               // info
               [],
               // listener details
               {
                 addonId: extension.id,
                 policy: extension.policy,
-                blockingAllowed: extension.hasPermission("webRequestBlocking"),
+                blockingAllowed: false,
               }
             );
 
