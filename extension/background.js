@@ -115,7 +115,9 @@ class AddonsSearchExperiment {
     );
 
     if (from === to) {
-      // We do not report redirects to same public suffixes.
+      // We do not report redirects to same public suffixes. However, we will
+      // report redirects from public suffixes belonging to a same entity
+      // (.e.g., `example.com` -> `example.fr`).
       return;
     }
 
