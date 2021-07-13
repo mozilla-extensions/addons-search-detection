@@ -35,12 +35,11 @@ this.addonsSearchExperiment = class extends ExtensionAPI {
     return {
       addonsSearchExperiment: {
         // `getMatchPatterns()` returns a map where each key is an URL pattern
-        // to monitor and its corresponding value is an add-on ID (search
-        // engine).
+        // to monitor and its corresponding value is a list of add-on IDs
+        // (search engines).
         //
         // Note: We don't return a simple list of URL patterns because the
-        // background script might want to lookup the add-on ID for a given
-        // URL.
+        // background script might want to lookup add-on IDs for a given URL.
         async getMatchPatterns() {
           const patterns = {};
 
@@ -56,7 +55,15 @@ this.addonsSearchExperiment = class extends ExtensionAPI {
                 // script because `webRequestCancelledHandler` splits patterns
                 // on `*` to retrieve URL prefixes.
                 const pattern = template.split("?")[0] + "*";
-                patterns[pattern] = _extensionID;
+
+                // Multiple search engines could register URL templates that
+                // would become the same URL pattern as defined above so we
+                // store a list of extension IDs per URL pattern.
+                if (!patterns[pattern]) {
+                  patterns[pattern] = [_extensionID];
+                } else if (!patterns[pattern].includes(_extensionID)) {
+                  patterns[pattern].push(_extensionID);
+                }
               });
             });
           } catch (err) {
@@ -145,9 +152,15 @@ this.addonsSearchExperiment = class extends ExtensionAPI {
               // initiated the redirect. It might not return anything when the
               // redirect is a search server-side redirect but it can also be
               // caused by an error.
-              const addonId = wrapper?.channel
-                ?.QueryInterface(Ci.nsIPropertyBag)
-                ?.getProperty("redirectedByExtension");
+              let addonId;
+
+              try {
+                addonId = wrapper?.channel
+                  ?.QueryInterface(Ci.nsIPropertyBag)
+                  ?.getProperty("redirectedByExtension");
+              } catch (err) {
+                Cu.reportError(err);
+              }
 
               fire.async({ addonId, redirectUrl, requestId, url });
             };

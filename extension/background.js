@@ -97,14 +97,18 @@ class AddonsSearchExperiment {
     // search server-side redirect.
     const isServerSideRedirect = !addonId && url !== redirectUrl;
 
+    let addonIds = [];
+
     // Search server-side redirects are possible because an extension has
     // registered a search engine, which is why we can (hopefully) retrieve the
     // add-on ID.
     if (isServerSideRedirect) {
-      addonId = this.getAddonIdFromUrl(url);
+      addonIds = this.getAddonIdsForUrl(url);
+    } else if (addonId) {
+      addonIds = [addonId];
     }
 
-    if (!addonId) {
+    if (addonIds.length === 0) {
       // No add-on ID means there is nothing we can report.
       return;
     }
@@ -131,16 +135,18 @@ class AddonsSearchExperiment {
       ? TELEMETRY_VALUE_SERVER
       : TELEMETRY_VALUE_EXTENSION;
 
-    const addonVersion = await browser.addonsSearchExperiment.getAddonVersion(
-      addonId
-    );
+    for (const addonId of addonIds) {
+      const addonVersion = await browser.addonsSearchExperiment.getAddonVersion(
+        addonId
+      );
 
-    this.recordEvent(
-      TELEMETRY_METHOD_ETLD_CHANGE,
-      telemetryObject,
-      telemetryValue,
-      { addonId, addonVersion, from, to }
-    );
+      this.recordEvent(
+        TELEMETRY_METHOD_ETLD_CHANGE,
+        telemetryObject,
+        telemetryValue,
+        { addonId, addonVersion, from, to }
+      );
+    }
   };
 
   recordEvent(method, object, value, extra) {
@@ -159,7 +165,7 @@ class AddonsSearchExperiment {
     );
   }
 
-  getAddonIdFromUrl(url) {
+  getAddonIdsForUrl(url) {
     for (const pattern of Object.keys(this.matchPatternsMap)) {
       const [urlPrefix] = pattern.split("*");
 
@@ -168,7 +174,7 @@ class AddonsSearchExperiment {
       }
     }
 
-    return null;
+    return [];
   }
 }
 
