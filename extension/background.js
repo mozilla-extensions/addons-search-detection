@@ -13,6 +13,7 @@ const TELEMETRY_VALUE_SERVER = "server";
 class AddonsSearchExperiment {
   constructor() {
     this.matchPatternsMap = {};
+    this.listeners = {};
 
     console.debug("registering telemetry events");
     browser.telemetry.registerEvents(TELEMETRY_CATEGORY, {
@@ -91,18 +92,23 @@ class AddonsSearchExperiment {
     // Do nothing.
   };
 
-  webRequestHandler = async ({ addonId, redirectUrl, requestId, url }) => {
+  webRequestHandler = async ({
+    addonId,
+    redirectUrl,
+    requestId,
+    url,
+    // Only set in the case of a redirect chain.
+    addonIds,
+  }) => {
     // When we do not have an add-on ID (in the request property bag) and the
     // `redirectUrl` is different than the original URL. we likely detected a
     // search server-side redirect.
     const isServerSideRedirect = !addonId && url !== redirectUrl;
 
-    let addonIds = [];
-
     // Search server-side redirects are possible because an extension has
     // registered a search engine, which is why we can (hopefully) retrieve the
     // add-on ID.
-    if (isServerSideRedirect) {
+    if (!addonIds && isServerSideRedirect) {
       addonIds = this.getAddonIdsForUrl(url);
     } else if (addonId) {
       addonIds = [addonId];
@@ -121,6 +127,12 @@ class AddonsSearchExperiment {
     );
 
     if (from === to) {
+      if (isServerSideRedirect) {
+        // This could be a redirect chain so let's register a new listener to
+        // "follow" the request (ID).
+        this.followRequestId({ addonIds, requestId, redirectUrl });
+      }
+
       // We do not report redirects to same public suffixes. However, we will
       // report redirects from public suffixes belonging to a same entity
       // (.e.g., `example.com` -> `example.fr`).
@@ -148,6 +160,60 @@ class AddonsSearchExperiment {
       );
     }
   };
+
+  // This is used when we detect a "server side redirect" but the "from" and
+  // "to" eTLDs are the same. In this case, we want to follow the redirect
+  // chain in case there is a server side redirect to a different eTLD
+  // somewhere.
+  followRequestId({ addonIds, requestId, redirectUrl, redirectChain }) {
+    console.debug(
+      `following requestId=${requestId} addonIds=${JSON.stringify(addonIds)}`
+    );
+
+    if (this.listeners[requestId]) {
+      console.debug(`listener already registered for requestId=${requestId}`);
+      return;
+    }
+
+    const listener = (details) => {
+      // If the requestId is the same as the one to "follow", we call our
+      // handler that contains the logic to record events if needed.
+      if (details.requestId === requestId) {
+        this.webRequestHandler({
+          requestId,
+          url: redirectUrl,
+          redirectUrl: details.url,
+          addonIds,
+        });
+      }
+    };
+
+    if (!browser.webRequest.onBeforeRequest.hasListener(listener)) {
+      console.debug(`adding temporary listener for requestId=${requestId}`);
+      browser.webRequest.onBeforeRequest.addListener(
+        listener,
+        {
+          urls: ["<all_urls>"],
+        },
+        ["blocking"]
+      );
+      // We store this listener in a map indexed by the requestId because this
+      // ID is unique and we only want 1 listener per requestId.
+      this.listeners[requestId] = listener;
+
+      // By simplicity, we use `setTimeout()` to remove the temporary listener,
+      // after 10 seconds.
+      setTimeout(() => {
+        if (browser.webRequest.onBeforeRequest.hasListener(listener)) {
+          console.debug(
+            `removing temporary listener for requestId=${requestId}`
+          );
+          browser.webRequest.onBeforeRequest.removeListener(listener);
+          delete this.listeners[requestId];
+        }
+      }, 10000);
+    }
+  }
 
   recordEvent(method, object, value, extra) {
     console.debug(
