@@ -45,7 +45,7 @@ this.addonsSearchExperiment = class extends ExtensionAPI {
 
           try {
             await searchInitialized;
-            const visibleEngines = await Services.search.getVisibleEngines();
+            const visibleEngines = await Services.search.getEngines();
 
             visibleEngines.forEach((engine) => {
               let { _extensionID, _urls } = engine;
