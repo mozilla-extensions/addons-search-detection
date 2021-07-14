@@ -202,7 +202,7 @@ class AddonsSearchExperiment {
       this.listeners[requestId] = listener;
 
       // By simplicity, we use `setTimeout()` to remove the temporary listener,
-      // after 10 seconds.
+      // after 60 seconds.
       setTimeout(() => {
         if (browser.webRequest.onBeforeRequest.hasListener(listener)) {
           console.debug(
@@ -211,7 +211,7 @@ class AddonsSearchExperiment {
           browser.webRequest.onBeforeRequest.removeListener(listener);
           delete this.listeners[requestId];
         }
-      }, 10000);
+      }, 60000);
     }
   }
 
