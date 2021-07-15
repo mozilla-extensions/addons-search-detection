@@ -13,7 +13,8 @@ const TELEMETRY_VALUE_SERVER = "server";
 class AddonsSearchExperiment {
   constructor() {
     this.matchPatternsMap = {};
-    this.listeners = {};
+    // The key is a requestId.
+    this.temporaryListenersMap = {};
 
     console.debug("registering telemetry events");
     browser.telemetry.registerEvents(TELEMETRY_CATEGORY, {
@@ -24,6 +25,18 @@ class AddonsSearchExperiment {
         record_on_release: true,
       },
     });
+
+    // This listener is used to clean up the temporary listeners used to follow
+    // requests in the case of redirect chains. It will only clean up
+    // successful requests. For other cases, we register a function with a long
+    // timer (in `followRequestId()`).
+    console.debug("registering onCompleted listener");
+    browser.webRequest.onCompleted.addListener(
+      ({ requestId }) => {
+        this.removeTemporaryListenerIfNeeded(requestId);
+      },
+      { urls: ["<all_urls>"] }
+    );
   }
 
   async getMatchPatterns() {
@@ -161,6 +174,20 @@ class AddonsSearchExperiment {
     }
   };
 
+  // Remove a temporary listener bound to a requestId if it exists. These
+  // temporary listeners are used to support redirect chains.
+  removeTemporaryListenerIfNeeded(requestId) {
+    if (this.temporaryListenersMap[requestId]) {
+      const { listener, timeoutId } = this.temporaryListenersMap[requestId];
+
+      console.debug(`removing temporary listener for requestId=${requestId}`);
+      clearTimeout(timeoutId);
+      browser.webRequest.onBeforeRequest.removeListener(listener);
+
+      delete this.temporaryListenersMap[requestId];
+    }
+  }
+
   // This is used when we detect a "server side redirect" but the "from" and
   // "to" eTLDs are the same. In this case, we want to follow the redirect
   // chain in case there is a server side redirect to a different eTLD
@@ -170,10 +197,7 @@ class AddonsSearchExperiment {
       `following requestId=${requestId} addonIds=${JSON.stringify(addonIds)}`
     );
 
-    if (this.listeners[requestId]) {
-      console.debug(`listener already registered for requestId=${requestId}`);
-      return;
-    }
+    this.removeTemporaryListenerIfNeeded(requestId);
 
     const listener = (details) => {
       // If the requestId is the same as the one to "follow", we call our
@@ -188,31 +212,24 @@ class AddonsSearchExperiment {
       }
     };
 
-    if (!browser.webRequest.onBeforeRequest.hasListener(listener)) {
-      console.debug(`adding temporary listener for requestId=${requestId}`);
-      browser.webRequest.onBeforeRequest.addListener(
-        listener,
-        {
-          urls: ["<all_urls>"],
-        },
-        ["blocking"]
-      );
-      // We store this listener in a map indexed by the requestId because this
-      // ID is unique and we only want 1 listener per requestId.
-      this.listeners[requestId] = listener;
+    console.debug(`adding temporary listener for requestId=${requestId}`);
+    browser.webRequest.onBeforeRequest.addListener(
+      listener,
+      { urls: ["<all_urls>"] },
+      ["blocking"]
+    );
 
-      // By simplicity, we use `setTimeout()` to remove the temporary listener,
-      // after 60 seconds.
-      setTimeout(() => {
-        if (browser.webRequest.onBeforeRequest.hasListener(listener)) {
-          console.debug(
-            `removing temporary listener for requestId=${requestId}`
-          );
-          browser.webRequest.onBeforeRequest.removeListener(listener);
-          delete this.listeners[requestId];
-        }
-      }, 60000);
-    }
+    // This is a fallback in case something goes wrong, e.g., cancelled or
+    // errored request.
+    const timeoutId = setTimeout(() => {
+      this.removeTemporaryListenerIfNeeded(requestId);
+    }, 60 * 1000);
+
+    // We store this listener in a map indexed by the requestId because this ID
+    // is unique and we only want 1 listener per requestId at the same time.
+    // The value of the map contains the listener as well as a timeout ID for
+    // the clean-up function (fallback).
+    this.temporaryListenersMap[requestId] = { timeoutId, listener };
   }
 
   recordEvent(method, object, value, extra) {
