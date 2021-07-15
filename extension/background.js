@@ -13,8 +13,8 @@ const TELEMETRY_VALUE_SERVER = "server";
 class AddonsSearchExperiment {
   constructor() {
     this.matchPatternsMap = {};
-    // The key is a requestId.
-    this.temporaryListenersMap = {};
+    // The key is a requestId. The corresponding value should be an object.
+    this.requestIdsToFollow = {};
 
     console.debug("registering telemetry events");
     browser.telemetry.registerEvents(TELEMETRY_CATEGORY, {
@@ -25,18 +25,6 @@ class AddonsSearchExperiment {
         record_on_release: true,
       },
     });
-
-    // This listener is used to clean up the temporary listeners used to follow
-    // requests in the case of redirect chains. It will only clean up
-    // successful requests. For other cases, we register a function with a long
-    // timer (in `followRequestId()`).
-    console.debug("registering onCompleted listener");
-    browser.webRequest.onCompleted.addListener(
-      ({ requestId }) => {
-        this.removeTemporaryListenerIfNeeded(requestId);
-      },
-      { urls: ["<all_urls>"] }
-    );
   }
 
   async getMatchPatterns() {
@@ -60,17 +48,17 @@ class AddonsSearchExperiment {
     // patterns (when the list of search engines changes).
     if (
       browser.addonsSearchExperiment.onBeforeRedirect.hasListener(
-        this.webRequestHandler
+        this.onRedirectHandler
       )
     ) {
       console.debug("removing onBeforeRedirect listener");
       browser.addonsSearchExperiment.onBeforeRedirect.removeListener(
-        this.webRequestHandler
+        this.onRedirectHandler
       );
     }
 
-    if (browser.webRequest.onBeforeRequest.hasListener(this.noOpHandler)) {
-      browser.webRequest.onBeforeRequest.removeListener(this.noOpHandler);
+    if (browser.webRequest.onBeforeRequest.hasListener(this.onRequestHandler)) {
+      browser.webRequest.onBeforeRequest.removeListener(this.onRequestHandler);
     }
 
     // Retrieve the list of URL patterns to monitor with our listener.
@@ -89,23 +77,82 @@ class AddonsSearchExperiment {
 
     // This is needed to force the registration of a traceable channel.
     browser.webRequest.onBeforeRequest.addListener(
-      this.noOpHandler,
+      this.onRequestHandler,
       { urls: patterns },
       ["blocking"]
     );
 
     console.debug("registering onBeforeRedirect listener");
     browser.addonsSearchExperiment.onBeforeRedirect.addListener(
-      this.webRequestHandler,
+      this.onRedirectHandler,
       { urls: patterns }
     );
   }
 
-  noOpHandler = () => {
-    // Do nothing.
+  // This listener is used to create two wildcard listeners used to follow
+  // redirect chains. It only registers the listeners when they are not already
+  // registered.
+  onRequestHandler = ({ requestId }) => {
+    if (!browser.webRequest.onBeforeRequest.hasListener(this.followHandler)) {
+      console.debug(`registering follow listener`);
+      browser.webRequest.onBeforeRequest.addListener(
+        this.followHandler,
+        { types: ["main_frame"], urls: ["<all_urls>"] },
+        ["blocking"]
+      );
+    }
+
+    if (!browser.webRequest.onCompleted.hasListener(this.cleanUpHandler)) {
+      console.debug(`registering clean-up listener`);
+      browser.webRequest.onCompleted.addListener(this.cleanUpHandler, {
+        types: ["main_frame"],
+        urls: ["<all_urls>"],
+      });
+    }
   };
 
-  webRequestHandler = async ({
+  // This is used when we detect a "server side redirect" but the "from" and
+  // "to" eTLDs are the same. In this case, we want to follow the redirect
+  // chain in case there is a server side redirect to a different eTLD
+  // somewhere.
+  followHandler = ({ requestId, url }) => {
+    if (!this.requestIdsToFollow[requestId]) {
+      return;
+    }
+
+    const { addonIds, redirectUrl } = this.requestIdsToFollow[requestId];
+
+    this.onRedirectHandler({
+      requestId,
+      url: redirectUrl,
+      redirectUrl: url,
+      addonIds,
+    });
+  };
+
+  // This listener is used to clean up the temporary listeners used to follow
+  // requests in the case of redirect chains. The requestId is removed from the
+  // map of request IDs to follow if it was followed. When there is no request
+  // IDs to follow, we also remove the wildcard listeners.
+  cleanUpHandler = ({ requestId }) => {
+    if (this.requestIdsToFollow[requestId]) {
+      const { timeoutId } = this.requestIdsToFollow[requestId];
+
+      console.debug(`removing requestId=${requestId} from the follow map`);
+      clearTimeout(timeoutId);
+      delete this.requestIdsToFollow[requestId];
+    }
+
+    if (Object.keys(this.requestIdsToFollow).length === 0) {
+      console.debug(`removing follow listener`);
+      browser.webRequest.onBeforeRequest.removeListener(this.followHandler);
+
+      console.debug(`removing clean-up listener`);
+      browser.webRequest.onCompleted.removeListener(this.cleanUpHandler);
+    }
+  };
+
+  onRedirectHandler = async ({
     addonId,
     redirectUrl,
     requestId,
@@ -143,7 +190,30 @@ class AddonsSearchExperiment {
       if (isServerSideRedirect) {
         // This could be a redirect chain so let's register a new listener to
         // "follow" the request (ID).
-        this.followRequestId({ addonIds, requestId, redirectUrl });
+        console.debug(`requestId=${requestId} might be a server side redirect`);
+
+        // Pass metadata to the follow listener.
+        if (this.requestIdsToFollow[requestId]) {
+          // If a previously registered fallback has been registered, let's
+          // clear it and re-add it later.
+          const { timeoutId } = this.requestIdsToFollow[requestId];
+
+          clearTimeout(timeoutId);
+        }
+
+        // This is a fallback in case the request does not succeed.
+        const timeoutId = setTimeout(() => {
+          console.debug(
+            `will use clean-up fallback for requestId=${requestId}`
+          );
+          this.cleanUpHandler({ requestId });
+        }, 60 * 1000);
+
+        this.requestIdsToFollow[requestId] = {
+          addonIds,
+          redirectUrl,
+          timeoutId,
+        };
       }
 
       // We do not report redirects to same public suffixes. However, we will
@@ -173,64 +243,6 @@ class AddonsSearchExperiment {
       );
     }
   };
-
-  // Remove a temporary listener bound to a requestId if it exists. These
-  // temporary listeners are used to support redirect chains.
-  removeTemporaryListenerIfNeeded(requestId) {
-    if (this.temporaryListenersMap[requestId]) {
-      const { listener, timeoutId } = this.temporaryListenersMap[requestId];
-
-      console.debug(`removing temporary listener for requestId=${requestId}`);
-      clearTimeout(timeoutId);
-      browser.webRequest.onBeforeRequest.removeListener(listener);
-
-      delete this.temporaryListenersMap[requestId];
-    }
-  }
-
-  // This is used when we detect a "server side redirect" but the "from" and
-  // "to" eTLDs are the same. In this case, we want to follow the redirect
-  // chain in case there is a server side redirect to a different eTLD
-  // somewhere.
-  followRequestId({ addonIds, requestId, redirectUrl, redirectChain }) {
-    console.debug(
-      `following requestId=${requestId} addonIds=${JSON.stringify(addonIds)}`
-    );
-
-    this.removeTemporaryListenerIfNeeded(requestId);
-
-    const listener = (details) => {
-      // If the requestId is the same as the one to "follow", we call our
-      // handler that contains the logic to record events if needed.
-      if (details.requestId === requestId) {
-        this.webRequestHandler({
-          requestId,
-          url: redirectUrl,
-          redirectUrl: details.url,
-          addonIds,
-        });
-      }
-    };
-
-    console.debug(`adding temporary listener for requestId=${requestId}`);
-    browser.webRequest.onBeforeRequest.addListener(
-      listener,
-      { urls: ["<all_urls>"] },
-      ["blocking"]
-    );
-
-    // This is a fallback in case something goes wrong, e.g., cancelled or
-    // errored request.
-    const timeoutId = setTimeout(() => {
-      this.removeTemporaryListenerIfNeeded(requestId);
-    }, 60 * 1000);
-
-    // We store this listener in a map indexed by the requestId because this ID
-    // is unique and we only want 1 listener per requestId at the same time.
-    // The value of the map contains the listener as well as a timeout ID for
-    // the clean-up function (fallback).
-    this.temporaryListenersMap[requestId] = { timeoutId, listener };
-  }
 
   recordEvent(method, object, value, extra) {
     console.debug(
