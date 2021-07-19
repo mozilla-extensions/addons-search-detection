@@ -10,11 +10,15 @@ const TELEMETRY_OBJECT_OTHER = "other";
 const TELEMETRY_VALUE_EXTENSION = "extension";
 const TELEMETRY_VALUE_SERVER = "server";
 
+const CLEAN_UP_TIMEOUT_IN_SECONDS = 90;
+
+// console.debug = () => {};
+
 class AddonsSearchExperiment {
   constructor() {
     this.matchPatternsMap = {};
     // The key is a requestId. The corresponding value should be an object.
-    this.requestIdsToFollow = {};
+    this.requestIdsToFollow = new Map();
 
     console.debug("registering telemetry events");
     browser.telemetry.registerEvents(TELEMETRY_CATEGORY, {
@@ -75,10 +79,10 @@ class AddonsSearchExperiment {
       return;
     }
 
-    // This is needed to force the registration of a traceable channel.
+    console.debug("registering onBeforeRequest listener");
     browser.webRequest.onBeforeRequest.addListener(
       this.onRequestHandler,
-      { urls: patterns },
+      { types: ["main_frame"], urls: patterns },
       ["blocking"]
     );
 
@@ -89,9 +93,9 @@ class AddonsSearchExperiment {
     );
   }
 
-  // This listener is used to create two wildcard listeners used to follow
-  // redirect chains. It only registers the listeners when they are not already
-  // registered.
+  // This listener is used to lazily create a wildcard listener used to follow
+  // redirect chains (in addition to being required to force the registration
+  // of traceable channels).
   onRequestHandler = ({ requestId }) => {
     if (!browser.webRequest.onBeforeRequest.hasListener(this.followHandler)) {
       console.debug(`registering follow listener`);
@@ -102,12 +106,12 @@ class AddonsSearchExperiment {
       );
     }
 
-    if (!browser.webRequest.onCompleted.hasListener(this.cleanUpHandler)) {
-      console.debug(`registering clean-up listener`);
-      browser.webRequest.onCompleted.addListener(this.cleanUpHandler, {
-        types: ["main_frame"],
-        urls: ["<all_urls>"],
-      });
+    if (!this.requestIdsToFollow.has(requestId)) {
+      console.debug(`registering clean-up function for requestId=${requestId}`);
+
+      setTimeout(() => {
+        this.cleanUpHandler({ requestId });
+      }, CLEAN_UP_TIMEOUT_IN_SECONDS * 1000);
     }
   };
 
@@ -115,19 +119,15 @@ class AddonsSearchExperiment {
   // "to" eTLDs are the same. In this case, we want to follow the redirect
   // chain in case there is a server side redirect to a different eTLD
   // somewhere.
-  followHandler = ({ requestId, url }) => {
-    if (!this.requestIdsToFollow[requestId]) {
+  followHandler = ({ requestId, url: redirectUrl }) => {
+    if (!this.requestIdsToFollow.has(requestId)) {
       return;
     }
 
-    const { addonIds, redirectUrl } = this.requestIdsToFollow[requestId];
+    const { addonIds, url } = this.requestIdsToFollow.get(requestId);
 
-    this.onRedirectHandler({
-      requestId,
-      url: redirectUrl,
-      redirectUrl: url,
-      addonIds,
-    });
+    console.debug(`following requestId=${requestId}`);
+    this.onRedirectHandler({ requestId, url, redirectUrl, addonIds });
   };
 
   // This listener is used to clean up the temporary listeners used to follow
@@ -135,20 +135,14 @@ class AddonsSearchExperiment {
   // map of request IDs to follow if it was followed. When there is no request
   // IDs to follow, we also remove the wildcard listeners.
   cleanUpHandler = ({ requestId }) => {
-    if (this.requestIdsToFollow[requestId]) {
-      const { timeoutId } = this.requestIdsToFollow[requestId];
-
+    if (this.requestIdsToFollow.has(requestId)) {
       console.debug(`removing requestId=${requestId} from the follow map`);
-      clearTimeout(timeoutId);
-      delete this.requestIdsToFollow[requestId];
+      this.requestIdsToFollow.delete(requestId);
     }
 
-    if (Object.keys(this.requestIdsToFollow).length === 0) {
+    if (this.requestIdsToFollow.size === 0) {
       console.debug(`removing follow listener`);
       browser.webRequest.onBeforeRequest.removeListener(this.followHandler);
-
-      console.debug(`removing clean-up listener`);
-      browser.webRequest.onCompleted.removeListener(this.cleanUpHandler);
     }
   };
 
@@ -190,30 +184,12 @@ class AddonsSearchExperiment {
       if (isServerSideRedirect) {
         // This could be a redirect chain so let's register a new listener to
         // "follow" the request (ID).
-        console.debug(`requestId=${requestId} might be a server side redirect`);
+        console.debug(
+          `requestId=${requestId} might be a server side redirect - ${url} -> ${redirectUrl}`
+        );
 
         // Pass metadata to the follow listener.
-        if (this.requestIdsToFollow[requestId]) {
-          // If a previously registered fallback has been registered, let's
-          // clear it and re-add it later.
-          const { timeoutId } = this.requestIdsToFollow[requestId];
-
-          clearTimeout(timeoutId);
-        }
-
-        // This is a fallback in case the request does not succeed.
-        const timeoutId = setTimeout(() => {
-          console.debug(
-            `will use clean-up fallback for requestId=${requestId}`
-          );
-          this.cleanUpHandler({ requestId });
-        }, 60 * 1000);
-
-        this.requestIdsToFollow[requestId] = {
-          addonIds,
-          redirectUrl,
-          timeoutId,
-        };
+        this.requestIdsToFollow.set(requestId, { addonIds, url: redirectUrl });
       }
 
       // We do not report redirects to same public suffixes. However, we will
