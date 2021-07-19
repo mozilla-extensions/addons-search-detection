@@ -16,7 +16,7 @@ const UNFOLLOW_DELAY_IN_SECONDS = 90;
 
 class AddonsSearchExperiment {
   constructor() {
-    this.matchPatternsMap = {};
+    this.matchPatterns = {};
     // The key is a requestId. The corresponding value should be an object.
     this.requestIdsToFollow = new Map();
 
@@ -33,14 +33,14 @@ class AddonsSearchExperiment {
 
   async getMatchPatterns() {
     try {
-      this.matchPatternsMap =
+      this.matchPatterns =
         await browser.addonsSearchExperiment.getMatchPatterns();
     } catch (err) {
       console.error(`failed to retrieve the list of URL patterns: ${err}`);
-      this.matchPatternsMap = {};
+      this.matchPatterns = {};
     }
 
-    return this.matchPatternsMap;
+    return this.matchPatterns;
   }
 
   // When the search service changes the set of engines that are enabled, we
@@ -70,8 +70,8 @@ class AddonsSearchExperiment {
     //
     // Note: search suggestions are system principal requests, so webRequest
     // cannot intercept them.
-    const matchPatternsMap = await this.getMatchPatterns();
-    const patterns = Object.keys(matchPatternsMap);
+    const matchPatterns = await this.getMatchPatterns();
+    const patterns = Object.keys(matchPatterns);
 
     if (patterns.length === 0) {
       console.debug(
@@ -237,11 +237,11 @@ class AddonsSearchExperiment {
   };
 
   getAddonIdsForUrl(url) {
-    for (const pattern of Object.keys(this.matchPatternsMap)) {
+    for (const pattern of Object.keys(this.matchPatterns)) {
       const [urlPrefix] = pattern.split("*");
 
       if (url.startsWith(urlPrefix)) {
-        return this.matchPatternsMap[pattern];
+        return this.matchPatterns[pattern];
       }
     }
 
