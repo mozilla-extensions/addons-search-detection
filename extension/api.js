@@ -109,7 +109,9 @@ this.addonsSearchExperiment = class extends ExtensionAPI {
               if (
                 aTopic !== SEARCH_TOPIC_ENGINE_MODIFIED ||
                 // We are only interested in these modified types.
-                !["engine-added", "engine-removed"].includes(aData)
+                !["engine-added", "engine-removed", "engine-changed"].includes(
+                  aData
+                )
               ) {
                 return;
               }
