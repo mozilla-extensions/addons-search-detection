@@ -10,7 +10,7 @@ const TELEMETRY_OBJECT_OTHER = "other";
 const TELEMETRY_VALUE_EXTENSION = "extension";
 const TELEMETRY_VALUE_SERVER = "server";
 
-const CLEAN_UP_TIMEOUT_IN_SECONDS = 90;
+const UNFOLLOW_DELAY_IN_SECONDS = 90;
 
 // console.debug = () => {};
 
@@ -62,6 +62,7 @@ class AddonsSearchExperiment {
     }
 
     if (browser.webRequest.onBeforeRequest.hasListener(this.onRequestHandler)) {
+      console.debug("removing onBeforeRequest listener");
       browser.webRequest.onBeforeRequest.removeListener(this.onRequestHandler);
     }
 
@@ -107,36 +108,44 @@ class AddonsSearchExperiment {
     }
 
     if (!this.requestIdsToFollow.has(requestId)) {
-      console.debug(`registering clean-up function for requestId=${requestId}`);
+      console.debug(
+        `registering unfollow delayed function for requestId=${requestId}`
+      );
 
       setTimeout(() => {
-        this.cleanUpHandler({ requestId });
-      }, CLEAN_UP_TIMEOUT_IN_SECONDS * 1000);
+        this.unfollowHandler({ requestId });
+      }, UNFOLLOW_DELAY_IN_SECONDS * 1000);
     }
   };
 
-  // This is used when we detect a "server side redirect" but the "from" and
-  // "to" eTLDs are the same. In this case, we want to follow the redirect
-  // chain in case there is a server side redirect to a different eTLD
-  // somewhere.
-  followHandler = ({ requestId, url: redirectUrl }) => {
+  // This listener is used when we detect a "server side redirect". We want to
+  // follow the request (ID) and keep a list of URLs (chain) for it.
+  followHandler = ({ requestId, url }) => {
     if (!this.requestIdsToFollow.has(requestId)) {
       return;
     }
 
-    const { addonIds, url } = this.requestIdsToFollow.get(requestId);
-
-    console.debug(`following requestId=${requestId}`);
-    this.onRedirectHandler({ requestId, url, redirectUrl, addonIds });
+    // Add current URL to the redirect chain.
+    this.requestIdsToFollow.get(requestId).chain.push(url);
   };
 
-  // This listener is used to clean up the temporary listeners used to follow
-  // requests in the case of redirect chains. The requestId is removed from the
-  // map of request IDs to follow if it was followed. When there is no request
-  // IDs to follow, we also remove the wildcard listeners.
-  cleanUpHandler = ({ requestId }) => {
+  // This listener is used when we stop following a request (ID). We report
+  // information if needed, then the requestId is removed from the map of
+  // request IDs to follow. In addition, when there is no request IDs to
+  // follow, we also remove the (wildcard) follow listener.
+  unfollowHandler = async ({ requestId }) => {
     if (this.requestIdsToFollow.has(requestId)) {
-      console.debug(`removing requestId=${requestId} from the follow map`);
+      const { addonIds, chain } = this.requestIdsToFollow.get(requestId);
+
+      await this.report({
+        addonIds,
+        url: chain[0],
+        redirectUrl: chain[chain.length - 1],
+        telemetryObject: TELEMETRY_OBJECT_OTHER,
+        telemetryValue: TELEMETRY_VALUE_SERVER,
+      });
+
+      console.debug(`stop following requestId=${requestId}`);
       this.requestIdsToFollow.delete(requestId);
     }
 
@@ -146,23 +155,17 @@ class AddonsSearchExperiment {
     }
   };
 
-  onRedirectHandler = async ({
-    addonId,
-    redirectUrl,
-    requestId,
-    url,
-    // Only set in the case of a redirect chain.
-    addonIds,
-  }) => {
+  onRedirectHandler = async ({ addonId, redirectUrl, requestId, url }) => {
     // When we do not have an add-on ID (in the request property bag) and the
     // `redirectUrl` is different than the original URL. we likely detected a
     // search server-side redirect.
     const isServerSideRedirect = !addonId && url !== redirectUrl;
 
+    let addonIds = [];
     // Search server-side redirects are possible because an extension has
     // registered a search engine, which is why we can (hopefully) retrieve the
     // add-on ID.
-    if (!addonIds && isServerSideRedirect) {
+    if (isServerSideRedirect) {
       addonIds = this.getAddonIdsForUrl(url);
     } else if (addonId) {
       addonIds = [addonId];
@@ -173,68 +176,65 @@ class AddonsSearchExperiment {
       return;
     }
 
+    if (isServerSideRedirect) {
+      console.debug(`start following requestId=${requestId}`);
+
+      // Pass metadata to the follow listener.
+      this.requestIdsToFollow.set(requestId, { addonIds, chain: [url] });
+    } else {
+      await this.report({
+        addonIds,
+        url,
+        redirectUrl,
+        telemetryObject: TELEMETRY_OBJECT_WEBREQUEST,
+        telemetryValue: TELEMETRY_VALUE_EXTENSION,
+      });
+    }
+  };
+
+  report = async ({
+    addonIds,
+    url,
+    redirectUrl,
+    telemetryObject,
+    telemetryValue,
+  }) => {
     // This is the (initial) URL before the redirect.
     const from = await browser.addonsSearchExperiment.getPublicSuffix(url);
-    // This is the URL after the redirect.
+    // This is the URL after the redirect (or the last one of a chain).
     const to = await browser.addonsSearchExperiment.getPublicSuffix(
       redirectUrl
     );
 
     if (from === to) {
-      if (isServerSideRedirect) {
-        // This could be a redirect chain so let's register a new listener to
-        // "follow" the request (ID).
-        console.debug(
-          `requestId=${requestId} might be a server side redirect - ${url} -> ${redirectUrl}`
-        );
-
-        // Pass metadata to the follow listener.
-        this.requestIdsToFollow.set(requestId, { addonIds, url: redirectUrl });
-      }
-
-      // We do not report redirects to same public suffixes. However, we will
-      // report redirects from public suffixes belonging to a same entity
-      // (.e.g., `example.com` -> `example.fr`).
+      // We do not want to report redirects to same public suffixes. However,
+      // we will report redirects from public suffixes belonging to a same
+      // entity (.e.g., `example.com` -> `example.fr`).
       return;
     }
-
-    const telemetryObject = isServerSideRedirect
-      ? TELEMETRY_OBJECT_OTHER
-      : TELEMETRY_OBJECT_WEBREQUEST;
-
-    const telemetryValue = isServerSideRedirect
-      ? TELEMETRY_VALUE_SERVER
-      : TELEMETRY_VALUE_EXTENSION;
 
     for (const addonId of addonIds) {
       const addonVersion = await browser.addonsSearchExperiment.getAddonVersion(
         addonId
       );
+      const extra = { addonId, addonVersion, from, to };
 
-      this.recordEvent(
+      console.debug(
+        [
+          `recording event: method=${TELEMETRY_METHOD_ETLD_CHANGE}`,
+          `object=${telemetryObject} value=${telemetryValue}`,
+          `extra=${JSON.stringify(extra)}`,
+        ].join(" ")
+      );
+      browser.telemetry.recordEvent(
+        TELEMETRY_CATEGORY,
         TELEMETRY_METHOD_ETLD_CHANGE,
         telemetryObject,
         telemetryValue,
-        { addonId, addonVersion, from, to }
+        extra
       );
     }
   };
-
-  recordEvent(method, object, value, extra) {
-    console.debug(
-      `recording event: method=${method} object=${object} value=${value} extra=${JSON.stringify(
-        extra
-      )}`
-    );
-
-    browser.telemetry.recordEvent(
-      TELEMETRY_CATEGORY,
-      method,
-      object,
-      value,
-      extra
-    );
-  }
 
   getAddonIdsForUrl(url) {
     for (const pattern of Object.keys(this.matchPatternsMap)) {
