@@ -12,15 +12,18 @@ const TELEMETRY_VALUE_SERVER = "server";
 
 const UNFOLLOW_DELAY_IN_SECONDS = 90;
 
-// console.debug = () => {};
-
 class AddonsSearchExperiment {
-  constructor() {
+  constructor({ debugMode = false }) {
+    this.debugMode = debugMode;
+    // Make the extension report events earlier in debug mode.
+    this.unfollowDelayInSeconds = debugMode ? 10 : UNFOLLOW_DELAY_IN_SECONDS;
+    // The key is an URL pattern to monitor and its corresponding value is a
+    // list of add-on IDs.
     this.matchPatterns = {};
     // The key is a requestId. The corresponding value should be an object.
     this.requestIdsToFollow = new Map();
 
-    console.debug("registering telemetry events");
+    this.debug("registering telemetry events");
     browser.telemetry.registerEvents(TELEMETRY_CATEGORY, {
       [TELEMETRY_METHOD_ETLD_CHANGE]: {
         methods: [TELEMETRY_METHOD_ETLD_CHANGE],
@@ -55,14 +58,14 @@ class AddonsSearchExperiment {
         this.onRedirectHandler
       )
     ) {
-      console.debug("removing onBeforeRedirect listener");
+      this.debug("removing onBeforeRedirect listener");
       browser.addonsSearchExperiment.onBeforeRedirect.removeListener(
         this.onRedirectHandler
       );
     }
 
     if (browser.webRequest.onBeforeRequest.hasListener(this.onRequestHandler)) {
-      console.debug("removing onBeforeRequest listener");
+      this.debug("removing onBeforeRequest listener");
       browser.webRequest.onBeforeRequest.removeListener(this.onRequestHandler);
     }
 
@@ -74,20 +77,20 @@ class AddonsSearchExperiment {
     const patterns = Object.keys(matchPatterns);
 
     if (patterns.length === 0) {
-      console.debug(
+      this.debug(
         "not registering any listener because there is no URL to monitor"
       );
       return;
     }
 
-    console.debug("registering onBeforeRequest listener");
+    this.debug("registering onBeforeRequest listener");
     browser.webRequest.onBeforeRequest.addListener(
       this.onRequestHandler,
       { types: ["main_frame"], urls: patterns },
       ["blocking"]
     );
 
-    console.debug("registering onBeforeRedirect listener");
+    this.debug("registering onBeforeRedirect listener");
     browser.addonsSearchExperiment.onBeforeRedirect.addListener(
       this.onRedirectHandler,
       { urls: patterns }
@@ -99,7 +102,7 @@ class AddonsSearchExperiment {
   // of traceable channels).
   onRequestHandler = ({ requestId }) => {
     if (!browser.webRequest.onBeforeRequest.hasListener(this.followHandler)) {
-      console.debug(`registering follow listener`);
+      this.debug(`registering follow listener`);
       browser.webRequest.onBeforeRequest.addListener(
         this.followHandler,
         { types: ["main_frame"], urls: ["<all_urls>"] },
@@ -108,13 +111,13 @@ class AddonsSearchExperiment {
     }
 
     if (!this.requestIdsToFollow.has(requestId)) {
-      console.debug(
+      this.debug(
         `registering unfollow delayed function for requestId=${requestId}`
       );
 
       setTimeout(() => {
         this.unfollowRequest({ requestId });
-      }, UNFOLLOW_DELAY_IN_SECONDS * 1000);
+      }, this.unfollowDelayInSeconds * 1000);
     }
   };
 
@@ -156,7 +159,7 @@ class AddonsSearchExperiment {
     }
 
     if (maybeServerSideRedirect) {
-      console.debug(`start following requestId=${requestId}`);
+      this.debug(`start following requestId=${requestId}`);
 
       // Pass metadata to the follow listener.
       this.requestIdsToFollow.set(requestId, {
@@ -213,7 +216,7 @@ class AddonsSearchExperiment {
       );
       const extra = { addonId, addonVersion, from, to };
 
-      console.debug(
+      this.debug(
         [
           `recording event: method=${TELEMETRY_METHOD_ETLD_CHANGE}`,
           `object=${telemetryObject} value=${telemetryValue}`,
@@ -246,12 +249,12 @@ class AddonsSearchExperiment {
         telemetryValue: TELEMETRY_VALUE_SERVER,
       });
 
-      console.debug(`stop following requestId=${requestId}`);
+      this.debug(`stop following requestId=${requestId}`);
       this.requestIdsToFollow.delete(requestId);
     }
 
     if (this.requestIdsToFollow.size === 0) {
-      console.debug(`removing follow listener`);
+      this.debug(`removing follow listener`);
       browser.webRequest.onBeforeRequest.removeListener(this.followHandler);
     }
   }
@@ -267,11 +270,21 @@ class AddonsSearchExperiment {
 
     return [];
   }
+
+  debug(message) {
+    if (this.debugMode) {
+      console.debug(message);
+    }
+  }
 }
 
-const exp = new AddonsSearchExperiment();
-exp.monitor();
+browser.runtime.onInstalled.addListener(({ temporary: debugMode }) => {
+  const exp = new AddonsSearchExperiment({ debugMode });
+  exp.monitor();
 
-browser.addonsSearchExperiment.onSearchEngineModified.addListener(async () => {
-  await exp.monitor();
+  browser.addonsSearchExperiment.onSearchEngineModified.addListener(
+    async () => {
+      await exp.monitor();
+    }
+  );
 });
