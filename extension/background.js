@@ -63,7 +63,9 @@ class AddonsSearchExperiment {
         this.onRedirectHandler
       );
     }
-
+    // If there is already a listener, remove it so that we can re-add one
+    // after. This is because we're using the same listener with different URL
+    // patterns (when the list of search engines changes).
     if (browser.webRequest.onBeforeRequest.hasListener(this.onRequestHandler)) {
       this.debug("removing onBeforeRequest listener");
       browser.webRequest.onBeforeRequest.removeListener(this.onRequestHandler);

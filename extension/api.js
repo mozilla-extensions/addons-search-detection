@@ -51,7 +51,8 @@ this.addonsSearchExperiment = class extends ExtensionAPI {
               let { _extensionID, _urls } = engine;
 
               _urls
-                // We don't want to include "suggestion" URLs.
+                // We only want to collect "search URLs" (and not "suggestion"
+                // ones for instance). See `URL_TYPE` in `SearchUtils.jsm`.
                 .filter(({ type }) => type === "text/html")
                 .forEach(({ template }) => {
                   // If this is changed, double check the code in the background
