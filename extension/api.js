@@ -50,21 +50,24 @@ this.addonsSearchExperiment = class extends ExtensionAPI {
             visibleEngines.forEach((engine) => {
               let { _extensionID, _urls } = engine;
 
-              _urls.forEach(({ template }) => {
-                // If this is changed, double check the code in the background
-                // script because `webRequestCancelledHandler` splits patterns
-                // on `*` to retrieve URL prefixes.
-                const pattern = template.split("?")[0] + "*";
+              _urls
+                // We don't want to include "suggestion" URLs.
+                .filter(({ type }) => type === "text/html")
+                .forEach(({ template }) => {
+                  // If this is changed, double check the code in the background
+                  // script because `webRequestCancelledHandler` splits patterns
+                  // on `*` to retrieve URL prefixes.
+                  const pattern = template.split("?")[0] + "*";
 
-                // Multiple search engines could register URL templates that
-                // would become the same URL pattern as defined above so we
-                // store a list of extension IDs per URL pattern.
-                if (!patterns[pattern]) {
-                  patterns[pattern] = [_extensionID];
-                } else if (!patterns[pattern].includes(_extensionID)) {
-                  patterns[pattern].push(_extensionID);
-                }
-              });
+                  // Multiple search engines could register URL templates that
+                  // would become the same URL pattern as defined above so we
+                  // store a list of extension IDs per URL pattern.
+                  if (!patterns[pattern]) {
+                    patterns[pattern] = [_extensionID];
+                  } else if (!patterns[pattern].includes(_extensionID)) {
+                    patterns[pattern].push(_extensionID);
+                  }
+                });
             });
           } catch (err) {
             Cu.reportError(err);
