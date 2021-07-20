@@ -63,8 +63,15 @@ this.addonsSearchExperiment = class extends ExtensionAPI {
                   // would become the same URL pattern as defined above so we
                   // store a list of extension IDs per URL pattern.
                   if (!patterns[pattern]) {
-                    patterns[pattern] = [_extensionID];
-                  } else if (!patterns[pattern].includes(_extensionID)) {
+                    patterns[pattern] = [];
+                  }
+
+                  // We exclude built-in search engines because we don't need
+                  // to report them.
+                  if (
+                    !patterns[pattern].includes(_extensionID) &&
+                    !_extensionID.endsWith("@search.mozilla.org")
+                  ) {
                     patterns[pattern].push(_extensionID);
                   }
                 });
