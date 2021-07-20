@@ -181,7 +181,7 @@ class AddonsSearchExperiment {
     // At this point, we observed a webRequest redirect initiated by an add-on,
     // which we want to report if both eTLDs are different. This is verified in
     // the `report()` method.
-    await this.report({
+    this.report({
       addonIds,
       url,
       redirectUrl,
@@ -246,7 +246,7 @@ class AddonsSearchExperiment {
     if (this.requestIdsToFollow.has(requestId)) {
       const { addonIds, chain } = this.requestIdsToFollow.get(requestId);
 
-      await this.report({
+      this.report({
         addonIds,
         url: chain[0],
         redirectUrl: chain[chain.length - 1],
