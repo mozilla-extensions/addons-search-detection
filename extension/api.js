@@ -39,7 +39,8 @@ this.addonsSearchExperiment = class extends ExtensionAPI {
         // (search engines).
         //
         // Note: We don't return a simple list of URL patterns because the
-        // background script might want to lookup add-on IDs for a given URL.
+        // background script might want to lookup add-on IDs for a given URL in
+        // the case of server-side redirects.
         async getMatchPatterns() {
           const patterns = {};
 
