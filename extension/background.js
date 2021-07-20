@@ -161,11 +161,14 @@ class AddonsSearchExperiment {
     if (maybeServerSideRedirect) {
       this.debug(`start following requestId=${requestId}`);
 
-      // Pass metadata to the follow listener.
-      this.requestIdsToFollow.set(requestId, {
-        addonIds,
-        chain: [url, redirectUrl],
-      });
+      // Pass metadata to the follow listener and "start following" this
+      // request.
+      if (!this.requestIdsToFollow.has(requestId)) {
+        this.requestIdsToFollow.set(requestId, {
+          addonIds,
+          chain: [url, redirectUrl],
+        });
+      }
 
       // If we likely found a server-side redirect, we can stop there and let
       // the follow/unfollow logic do the rest and maybe report an actual
@@ -278,13 +281,10 @@ class AddonsSearchExperiment {
   }
 }
 
-browser.runtime.onInstalled.addListener(({ temporary: debugMode }) => {
-  const exp = new AddonsSearchExperiment({ debugMode });
-  exp.monitor();
+// Set `debugMode` to `true` for development purposes.
+const exp = new AddonsSearchExperiment({ debugMode: false });
+exp.monitor();
 
-  browser.addonsSearchExperiment.onSearchEngineModified.addListener(
-    async () => {
-      await exp.monitor();
-    }
-  );
+browser.addonsSearchExperiment.onSearchEngineModified.addListener(async () => {
+  await exp.monitor();
 });

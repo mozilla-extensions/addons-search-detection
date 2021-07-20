@@ -164,7 +164,9 @@ this.addonsSearchExperiment = class extends ExtensionAPI {
                 Cu.reportError(err);
               }
 
-              fire.async({ addonId, redirectUrl, requestId, url });
+              // We make in synchronous so that the event is not delayed and
+              // the order of the events is respected.
+              fire.sync({ addonId, redirectUrl, requestId, url });
             };
 
             WebRequest.onBeforeRedirect.addListener(
