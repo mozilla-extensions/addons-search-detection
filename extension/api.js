@@ -176,7 +176,7 @@ this.addonsSearchExperiment = class extends ExtensionAPI {
                 Cu.reportError(err);
               }
 
-              // We make in synchronous so that the event is not delayed and
+              // We make it synchronous so that the event is not delayed and
               // the order of the events is respected.
               fire.sync({ addonId, redirectUrl, requestId, url });
             };
