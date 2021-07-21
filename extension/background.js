@@ -140,6 +140,12 @@ class AddonsSearchExperiment {
   };
 
   onRedirectHandler = async ({ addonId, redirectUrl, requestId, url }) => {
+    if (this.requestIdsToFollow.has(requestId)) {
+      // When the requestId is already present in the list of request IDs to
+      // follow, we don't need to re-execute the logic below.
+      return;
+    }
+
     // When we do not have an add-on ID (in the request property bag) and the
     // `redirectUrl` is different than the original URL. we likely detected a
     // search server-side redirect.
@@ -165,12 +171,10 @@ class AddonsSearchExperiment {
 
       // Pass metadata to the follow listener and "start following" this
       // request.
-      if (!this.requestIdsToFollow.has(requestId)) {
-        this.requestIdsToFollow.set(requestId, {
-          addonIds,
-          chain: [url, redirectUrl],
-        });
-      }
+      this.requestIdsToFollow.set(requestId, {
+        addonIds,
+        chain: [url, redirectUrl],
+      });
 
       // If we likely found a server-side redirect, we can stop there and let
       // the follow/unfollow logic do the rest and maybe report an actual
