@@ -139,7 +139,7 @@ class AddonsSearchExperiment {
     }
   };
 
-  onRedirectHandler = async ({ addonId, redirectUrl, requestId, url }) => {
+  onRedirectHandler = ({ addonId, redirectUrl, requestId, url }) => {
     if (this.requestIdsToFollow.has(requestId)) {
       // When the requestId is already present in the list of request IDs to
       // follow, we don't need to re-execute the logic below.
