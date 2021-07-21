@@ -246,7 +246,7 @@ class AddonsSearchExperiment {
   // information if needed, then the requestId is removed from the map of
   // request IDs to follow. In addition, when there is no request IDs to
   // follow, we also remove the (wildcard) follow listener.
-  async unfollowRequest({ requestId }) {
+  unfollowRequest({ requestId }) {
     if (this.requestIdsToFollow.has(requestId)) {
       const { addonIds, chain } = this.requestIdsToFollow.get(requestId);
 
