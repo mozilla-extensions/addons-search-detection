@@ -26,6 +26,8 @@ class AddonsSearchExperiment {
         record_on_release: true,
       },
     });
+
+    this.onRedirectedListener = this.onRedirectedListener.bind(this);
   }
 
   async getMatchPatterns() {
@@ -98,7 +100,7 @@ class AddonsSearchExperiment {
     // Do nothing.
   }
 
-  onRedirectedListener = async ({ addonId, firstUrl, lastUrl }) => {
+  async onRedirectedListener({ addonId, firstUrl, lastUrl }) {
     if (!firstUrl || !lastUrl) {
       // Something went wrong but there is nothing we can do at this point.
       return;
@@ -167,7 +169,7 @@ class AddonsSearchExperiment {
         extra
       );
     }
-  };
+  }
 
   getAddonIdsForUrl(url) {
     for (const pattern of Object.keys(this.matchPatterns)) {
