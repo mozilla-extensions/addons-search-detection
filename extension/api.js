@@ -49,7 +49,7 @@ this.addonsSearchExperiment = class extends ExtensionAPI {
             const visibleEngines = await Services.search.getEngines();
 
             visibleEngines.forEach((engine) => {
-              let { _extensionID, _urls } = engine;
+              const { _extensionID, _urls } = engine;
 
               _urls
                 // We only want to collect "search URLs" (and not "suggestion"
@@ -145,40 +145,64 @@ this.addonsSearchExperiment = class extends ExtensionAPI {
           },
         }).api(),
 
-        // `onBeforeRedirect` is an event very similar to the public web
-        // request `onBeforeRedirect` but it is registered in the privileged
-        // code to make sure that we can read properties on a valid channel
-        // (wrapper). The registered listeners will received the `addonId` in
-        // addition to these props: `requestId`, `url` and `redirectUrl`.
-        onBeforeRedirect: new ExtensionCommon.EventManager({
+        // `onRedirected` is an event fired after a request has stopped and
+        // this request has been redirected once or more. The registered
+        // listeners will received the following properties:
+        //
+        //   - `addonId`: the add-on ID that redirected the request, if any.
+        //   - `firstUrl`: the first URL loaded for the request, before any
+        //      redirects.
+        //   - `lastUrl`: the last URL loaded for the request, after one or
+        //      more redirects.
+        onRedirected: new ExtensionCommon.EventManager({
           context,
-          name: "addonsSearchExperiment.onBeforeRedirect",
+          name: "addonsSearchExperiment.onRedirected",
           register: (fire, filter) => {
-            const listener = ({ requestId, url, redirectUrl }) => {
-              const wrapper = ChannelWrapper.getRegisteredChannel(
-                requestId,
-                context.extension.policy,
-                context.xulBrowser.frameLoader.remoteTab
-              );
+            const stopListener = (event) => {
+              if (event.type != "stop") {
+                return;
+              }
 
-              // When we detect a redirect, we read the request property,
+              const wrapper = event.currentTarget;
+              const { channel } = wrapper;
+
+              // When we detected a redirect, we read the request property,
               // hoping to find an add-on ID corresponding to the add-on that
               // initiated the redirect. It might not return anything when the
               // redirect is a search server-side redirect but it can also be
               // caused by an error.
               let addonId;
-
               try {
-                addonId = wrapper?.channel
+                addonId = channel
                   ?.QueryInterface(Ci.nsIPropertyBag)
                   ?.getProperty("redirectedByExtension");
               } catch (err) {
                 Cu.reportError(err);
               }
 
-              // We make it synchronous so that the event is not delayed and
-              // the order of the events is respected.
-              fire.sync({ addonId, redirectUrl, requestId, url });
+              let redirectChain;
+              try {
+                redirectChain = channel?.loadInfo?.redirectChain.map(
+                  (entry) => entry.principal.spec
+                );
+              } catch (err) {
+                Cu.reportError(err);
+              }
+
+              fire.sync({
+                addonId,
+                firstUrl: redirectChain && redirectChain[0],
+                lastUrl: wrapper.finalURL,
+              });
+            };
+
+            const listener = ({ requestId, url, redirectUrl }) => {
+              const wrapper = ChannelWrapper.getRegisteredChannel(
+                requestId,
+                context.extension.policy,
+                context.xulBrowser.frameLoader.remoteTab
+              );
+              wrapper.addEventListener("stop", stopListener);
             };
 
             WebRequest.onBeforeRedirect.addListener(

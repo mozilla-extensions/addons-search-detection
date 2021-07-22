@@ -28,7 +28,7 @@
         "parameters": []
       },
       {
-        "name": "onBeforeRedirect",
+        "name": "onRedirected",
         "type": "function",
         "parameters": [
           {
@@ -36,9 +36,8 @@
             "type": "object",
             "properties": {
               "addonId": { "type": "string" },
-              "redirectUrl": { "type": "string" },
-              "requestId": { "type": "string" },
-              "url": { "type": "string" }
+              "firstUrl": { "type": "string" },
+              "lastUrl": { "type": "string" }
             }
           }
         ],
