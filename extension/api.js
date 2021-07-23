@@ -32,6 +32,11 @@ this.addonsSearchExperiment = class extends ExtensionAPI {
   getAPI(context) {
     const { extension } = context;
 
+    // We want to temporarily store the first monitored URLs that have been
+    // redirected, indexed by request IDs, so that the background script can
+    // find the add-on IDs to report.
+    this.firstMatchedUrls = {};
+
     return {
       addonsSearchExperiment: {
         // `getMatchPatterns()` returns a map where each key is an URL pattern
@@ -150,8 +155,8 @@ this.addonsSearchExperiment = class extends ExtensionAPI {
         // listeners will received the following properties:
         //
         //   - `addonId`: the add-on ID that redirected the request, if any.
-        //   - `firstUrl`: the first URL loaded for the request, before any
-        //      redirects.
+        //   - `firstUrl`: the first monitored URL of the request that has
+        //      been redirected.
         //   - `lastUrl`: the last URL loaded for the request, after one or
         //      more redirects.
         onRedirected: new ExtensionCommon.EventManager({
@@ -164,7 +169,7 @@ this.addonsSearchExperiment = class extends ExtensionAPI {
               }
 
               const wrapper = event.currentTarget;
-              const { channel } = wrapper;
+              const { channel, id: requestId } = wrapper;
 
               // When we detected a redirect, we read the request property,
               // hoping to find an add-on ID corresponding to the add-on that
@@ -189,20 +194,35 @@ this.addonsSearchExperiment = class extends ExtensionAPI {
                 Cu.reportError(err);
               }
 
-              fire.sync({
-                addonId,
-                firstUrl: redirectChain && redirectChain[0],
-                lastUrl: wrapper.finalURL,
-              });
+              const firstUrl = this.firstMatchedUrls[requestId];
+              // We don't need this entry anymore.
+              delete this.firstMatchedUrls[requestId];
+
+              const lastUrl = wrapper.finalURL;
+
+              if (!firstUrl || !lastUrl) {
+                // Something went wrong but there is nothing we can do at this
+                // point.
+                return;
+              }
+
+              fire.sync({ addonId, firstUrl, lastUrl });
             };
 
-            const listener = ({ requestId, url, redirectUrl }) => {
+            const listener = ({ requestId, url }) => {
               const wrapper = ChannelWrapper.getRegisteredChannel(
                 requestId,
                 context.extension.policy,
                 context.xulBrowser.frameLoader.remoteTab
               );
-              wrapper.addEventListener("stop", stopListener);
+
+              // Keep the first monitored URL that was redirected for the
+              // request until the request has stopped.
+              if (!this.firstMatchedUrls[requestId]) {
+                this.firstMatchedUrls[requestId] = url;
+
+                wrapper.addEventListener("stop", stopListener);
+              }
             };
 
             WebRequest.onBeforeRedirect.addListener(

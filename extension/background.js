@@ -101,11 +101,6 @@ class AddonsSearchExperiment {
   }
 
   async onRedirectedListener({ addonId, firstUrl, lastUrl }) {
-    if (!firstUrl || !lastUrl) {
-      // Something went wrong but there is nothing we can do at this point.
-      return;
-    }
-
     // When we do not have an add-on ID (in the request property bag), we
     // likely detected a search server-side redirect.
     const maybeServerSideRedirect = !addonId;
@@ -125,7 +120,7 @@ class AddonsSearchExperiment {
       return;
     }
 
-    // This is the initial URL before any redirect.
+    // This is the monitored URL that was first redirected.
     const from = await browser.addonsSearchExperiment.getPublicSuffix(firstUrl);
     // This is the final URL after redirect(s).
     const to = await browser.addonsSearchExperiment.getPublicSuffix(lastUrl);
@@ -173,7 +168,8 @@ class AddonsSearchExperiment {
 
   getAddonIdsForUrl(url) {
     for (const pattern of Object.keys(this.matchPatterns)) {
-      const [urlPrefix] = pattern.split("*");
+      // `getMatchPatterns()` returns the prefix plus "*".
+      const urlPrefix = pattern.slice(0, -1);
 
       if (url.startsWith(urlPrefix)) {
         return this.matchPatterns[pattern];
