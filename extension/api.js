@@ -185,15 +185,6 @@ this.addonsSearchExperiment = class extends ExtensionAPI {
                 Cu.reportError(err);
               }
 
-              let redirectChain;
-              try {
-                redirectChain = channel?.loadInfo?.redirectChain.map(
-                  (entry) => entry.principal.spec
-                );
-              } catch (err) {
-                Cu.reportError(err);
-              }
-
               const firstUrl = this.firstMatchedUrls[requestId];
               // We don't need this entry anymore.
               delete this.firstMatchedUrls[requestId];
@@ -210,16 +201,16 @@ this.addonsSearchExperiment = class extends ExtensionAPI {
             };
 
             const listener = ({ requestId, url }) => {
-              const wrapper = ChannelWrapper.getRegisteredChannel(
-                requestId,
-                context.extension.policy,
-                context.xulBrowser.frameLoader.remoteTab
-              );
-
               // Keep the first monitored URL that was redirected for the
               // request until the request has stopped.
               if (!this.firstMatchedUrls[requestId]) {
                 this.firstMatchedUrls[requestId] = url;
+
+                const wrapper = ChannelWrapper.getRegisteredChannel(
+                  requestId,
+                  context.extension.policy,
+                  context.xulBrowser.frameLoader.remoteTab
+                );
 
                 wrapper.addEventListener("stop", stopListener);
               }
