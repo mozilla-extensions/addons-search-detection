@@ -200,7 +200,13 @@ this.addonsSearchExperiment = class extends ExtensionAPI {
               fire.sync({ addonId, firstUrl, lastUrl });
             };
 
-            const listener = ({ requestId, url }) => {
+            const listener = ({ requestId, url, originUrl }) => {
+              // We exclude requests not originating from the location bar,
+              // bookmarks and other "system-ish" requests.
+              if (originUrl !== undefined) {
+                return;
+              }
+
               // Keep the first monitored URL that was redirected for the
               // request until the request has stopped.
               if (!this.firstMatchedUrls[requestId]) {
