@@ -56,6 +56,11 @@ this.addonsSearchExperiment = class extends ExtensionAPI {
             visibleEngines.forEach((engine) => {
               const { _extensionID, _urls } = engine;
 
+              if (!_extensionID) {
+                // OpenSearch engines don't have an extension ID.
+                return;
+              }
+
               _urls
                 // We only want to collect "search URLs" (and not "suggestion"
                 // ones for instance). See `URL_TYPE` in `SearchUtils.jsm`.
