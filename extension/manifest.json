@@ -1,9 +1,9 @@
 {
   "manifest_version": 2,
-  "name": "Add-ons Search Experiment",
+  "name": "Add-ons Search Detection",
   "applications": {
     "gecko": {
-      "id": "addons-search-experiment@mozilla.com"
+      "id": "addons-search-detection@mozilla.com"
     }
   },
   "version": "1.0.0",

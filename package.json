@@ -1,14 +1,14 @@
 {
-  "name": "addons-search-experiment",
+  "name": "addons-search-detection",
   "version": "1.0.0",
-  "repository": "https://github.com/mozilla-extensions/addons-search-experiment",
+  "repository": "https://github.com/mozilla-extensions/addons-search-detection",
   "license": "MPLv2",
   "private": true,
   "devDependencies": {
     "web-ext": "^6.2.0"
   },
   "scripts": {
-    "build": "web-ext build -s extension --overwrite-dest --filename addons-search-experiment.xpi",
+    "build": "web-ext build -s extension --overwrite-dest --filename addons-search-detection.xpi",
     "lint": "web-ext lint -s extension"
   }
 }

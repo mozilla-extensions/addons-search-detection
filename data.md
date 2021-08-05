@@ -1,4 +1,4 @@
-# Add-ons Search Experiment Pings
+# Add-ons Search Detection Pings
 
 This add-on will collect information about search engines.
 
