@@ -1,6 +1,6 @@
 "use strict";
 
-const TELEMETRY_CATEGORY = "addonsSearchExperiment";
+const TELEMETRY_CATEGORY = "addonsSearchDetection";
 // methods
 const TELEMETRY_METHOD_ETLD_CHANGE = "etld_change";
 // objects

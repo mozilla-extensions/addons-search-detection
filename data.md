@@ -2,7 +2,7 @@
 
 This add-on will collect information about search engines.
 
-- `addonsSearchExperiment`
+- `addonsSearchDetection`
   - `etld_change`: indicates a eTLD change
     - `webrequest` or `other`: the "API" used to change the eTLD. Note that `other` is used when the change has not been initiated from the client.
     - `extension` or `server`: whether the eTLD change has been done by an extension (add-on) or server.
@@ -18,7 +18,7 @@ This add-on will collect information about search engines.
   "events": [
     [
       123456,
-      "addonsSearchExperiment",
+      "addonsSearchDetection",
       "etld_change",
       "webrequest",
       "extension",
