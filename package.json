@@ -1,6 +1,6 @@
 {
   "name": "addons-search-detection",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "repository": "https://github.com/mozilla-extensions/addons-search-detection",
   "license": "MPLv2",
   "private": true,
