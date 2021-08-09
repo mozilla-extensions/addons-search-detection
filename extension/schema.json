@@ -1,6 +1,6 @@
 [
   {
-    "namespace": "addonsSearchExperiment",
+    "namespace": "addonsSearchDetection",
     "functions": [
       {
         "name": "getMatchPatterns",

@@ -9,13 +9,13 @@
   "version": "1.0.1",
   "description": "",
   "experiment_apis": {
-    "addonsSearchExperiment": {
+    "addonsSearchDetection": {
       "schema": "schema.json",
       "parent": {
         "scopes": ["addon_parent"],
         "script": "api.js",
         "events": [],
-        "paths": [["addonsSearchExperiment"]]
+        "paths": [["addonsSearchDetection"]]
       }
     }
   },
