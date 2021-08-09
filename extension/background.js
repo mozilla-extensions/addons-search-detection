@@ -10,7 +10,7 @@ const TELEMETRY_OBJECT_OTHER = "other";
 const TELEMETRY_VALUE_EXTENSION = "extension";
 const TELEMETRY_VALUE_SERVER = "server";
 
-class AddonsSearchExperiment {
+class AddonsSearchDetection {
   constructor({ debugMode = false }) {
     this.debugMode = debugMode;
     // The key is an URL pattern to monitor and its corresponding value is a
@@ -33,7 +33,7 @@ class AddonsSearchExperiment {
   async getMatchPatterns() {
     try {
       this.matchPatterns =
-        await browser.addonsSearchExperiment.getMatchPatterns();
+        await browser.addonsSearchDetection.getMatchPatterns();
     } catch (err) {
       console.error(`failed to retrieve the list of URL patterns: ${err}`);
       this.matchPatterns = {};
@@ -50,12 +50,12 @@ class AddonsSearchExperiment {
     // after. This is because we're using the same listener with different URL
     // patterns (when the list of search engines changes).
     if (
-      browser.addonsSearchExperiment.onRedirected.hasListener(
+      browser.addonsSearchDetection.onRedirected.hasListener(
         this.onRedirectedListener
       )
     ) {
       this.debug("removing onRedirected listener");
-      browser.addonsSearchExperiment.onRedirected.removeListener(
+      browser.addonsSearchDetection.onRedirected.removeListener(
         this.onRedirectedListener
       );
     }
@@ -89,7 +89,7 @@ class AddonsSearchExperiment {
     );
 
     this.debug("registering onRedirected listener");
-    browser.addonsSearchExperiment.onRedirected.addListener(
+    browser.addonsSearchDetection.onRedirected.addListener(
       this.onRedirectedListener,
       { urls: patterns }
     );
@@ -121,9 +121,9 @@ class AddonsSearchExperiment {
     }
 
     // This is the monitored URL that was first redirected.
-    const from = await browser.addonsSearchExperiment.getPublicSuffix(firstUrl);
+    const from = await browser.addonsSearchDetection.getPublicSuffix(firstUrl);
     // This is the final URL after redirect(s).
-    const to = await browser.addonsSearchExperiment.getPublicSuffix(lastUrl);
+    const to = await browser.addonsSearchDetection.getPublicSuffix(lastUrl);
 
     if (from === to) {
       // We do not want to report redirects to same public suffixes. However,
@@ -144,7 +144,7 @@ class AddonsSearchExperiment {
       : TELEMETRY_VALUE_EXTENSION;
 
     for (const addonId of addonIds) {
-      const addonVersion = await browser.addonsSearchExperiment.getAddonVersion(
+      const addonVersion = await browser.addonsSearchDetection.getAddonVersion(
         addonId
       );
       const extra = { addonId, addonVersion, from, to };
@@ -187,9 +187,9 @@ class AddonsSearchExperiment {
 }
 
 // Set `debugMode` to `true` for development purposes.
-const exp = new AddonsSearchExperiment({ debugMode: false });
+const exp = new AddonsSearchDetection({ debugMode: false });
 exp.monitor();
 
-browser.addonsSearchExperiment.onSearchEngineModified.addListener(async () => {
+browser.addonsSearchDetection.onSearchEngineModified.addListener(async () => {
   await exp.monitor();
 });

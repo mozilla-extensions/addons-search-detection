@@ -28,7 +28,7 @@ XPCOMUtils.defineLazyGetter(global, "searchInitialized", () => {
 
 const SEARCH_TOPIC_ENGINE_MODIFIED = "browser-search-engine-modified";
 
-this.addonsSearchExperiment = class extends ExtensionAPI {
+this.addonsSearchDetection = class extends ExtensionAPI {
   getAPI(context) {
     const { extension } = context;
 
@@ -38,7 +38,7 @@ this.addonsSearchExperiment = class extends ExtensionAPI {
     this.firstMatchedUrls = {};
 
     return {
-      addonsSearchExperiment: {
+      addonsSearchDetection: {
         // `getMatchPatterns()` returns a map where each key is an URL pattern
         // to monitor and its corresponding value is a list of add-on IDs
         // (search engines).
@@ -121,7 +121,7 @@ this.addonsSearchExperiment = class extends ExtensionAPI {
         // See: https://searchfox.org/mozilla-central/source/toolkit/components/search/SearchUtils.jsm#145-152
         onSearchEngineModified: new ExtensionCommon.EventManager({
           context,
-          name: "addonsSearchExperiment.onSearchEngineModified",
+          name: "addonsSearchDetection.onSearchEngineModified",
           register: (fire) => {
             const onSearchEngineModifiedObserver = (
               aSubject,
@@ -166,7 +166,7 @@ this.addonsSearchExperiment = class extends ExtensionAPI {
         //      more redirects.
         onRedirected: new ExtensionCommon.EventManager({
           context,
-          name: "addonsSearchExperiment.onRedirected",
+          name: "addonsSearchDetection.onRedirected",
           register: (fire, filter) => {
             const stopListener = (event) => {
               if (event.type != "stop") {
